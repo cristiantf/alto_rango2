@@ -1,7 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 
-const API = import.meta.env.VITE_API_URL || 'http://localhost:8000/api'
+const API = import.meta.env.VITE_API_URL || 'https://altorangogym.com/api'
 
 const DEFAULT_GYM = {
   id: 1,
@@ -27,9 +27,10 @@ function initials(name) {
 
 function normalizeRole(raw, roleId) {
   const value = String(raw || '').toLowerCase().trim()
-  if (roleId === 1) return 'admin'
-  if (roleId === 2) return 'empleado'
-  if (roleId === 3) return 'usuario'
+  const rId = Number(roleId)
+  if (rId === 1) return 'admin'
+  if (rId === 2) return 'empleado'
+  if (rId === 3) return 'usuario'
   if (['admin', 'administrador', 'super admin', 'superadmin'].includes(value)) return 'admin'
   if (['empleado', 'encargado', 'recepcion', 'recepcionista'].includes(value)) return 'empleado'
   if (value === 'usuario') return 'usuario'
@@ -58,22 +59,22 @@ export const useAuthStore = defineStore('auth', () => {
     if (g) initialGym = { ...DEFAULT_GYM, ...g }
   } catch { /* noop */ }
 
-  const user        = ref(normalizeUser(initialUser))
-  const gym         = ref(initialGym)
+  const user = ref(normalizeUser(initialUser))
+  const gym = ref(initialGym)
   const systemUsers = ref([])   // se carga desde la API
 
   // ── Computed ────────────────────────────────────────────
-  const isAuthenticated  = computed(() => !!user.value)
-  const userName         = computed(() => user.value?.name || '')
-  const userRole         = computed(() => user.value?.role || '')
-  const userRoleLabel    = computed(() => ROLE_LABELS[user.value?.role] || user.value?.role || '')
-  const gymName          = computed(() => gym.value?.name || 'Alto Rango Gym')
-  const isAdmin          = computed(() => user.value?.role === 'admin')
-  const isEmpleado       = computed(() => user.value?.role === 'empleado')
-  const isUsuario        = computed(() => user.value?.role === 'usuario')
-  const canManageUsers   = computed(() => isAdmin.value)
-  const canManagePlans   = computed(() => isAdmin.value)
-  const canSell          = computed(() => isAdmin.value || isEmpleado.value)
+  const isAuthenticated = computed(() => !!user.value)
+  const userName = computed(() => user.value?.name || '')
+  const userRole = computed(() => user.value?.role || '')
+  const userRoleLabel = computed(() => ROLE_LABELS[user.value?.role] || user.value?.role || '')
+  const gymName = computed(() => gym.value?.name || 'Alto Rango Gym')
+  const isAdmin = computed(() => user.value?.role === 'admin')
+  const isEmpleado = computed(() => user.value?.role === 'empleado')
+  const isUsuario = computed(() => user.value?.role === 'usuario')
+  const canManageUsers = computed(() => isAdmin.value)
+  const canManagePlans = computed(() => isAdmin.value)
+  const canSell = computed(() => isAdmin.value || isEmpleado.value)
   const canAccessControl = computed(() => isAdmin.value || isEmpleado.value)
 
   // ── Login → llama a POST /api/auth/login ────────────────

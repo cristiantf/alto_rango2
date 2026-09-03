@@ -48,6 +48,13 @@ function toggleSidebar() {
 // Cargar datos cuando el usuario está autenticado
 onMounted(() => { if (auth.isAuthenticated) gym.loadAll() })
 watch(() => auth.isAuthenticated, (val) => { if (val) gym.loadAll() })
+
+// Cerrar sidebar en móvil al cambiar de ruta
+watch(route, () => {
+  if (window.innerWidth <= 768) {
+    sidebarOpen.value = false
+  }
+})
 </script>
 
 <style>
@@ -88,13 +95,22 @@ watch(() => auth.isAuthenticated, (val) => { if (val) gym.loadAll() })
 }
 
 /* Sidebar como drawer en móvil */
+.sidebar-overlay {
+  display: none;
+  position: fixed; inset: 0;
+  background: rgba(0,0,0,0.5);
+  backdrop-filter: blur(2px);
+  z-index: 50; /* Menor que el sidebar (51) */
+}
+.sidebar-overlay.active { display: block; }
+
 @media (max-width: 768px) {
-  :deep(.sidebar) {
+  .sidebar {
     transform: translateX(-100%);
     transition: transform 0.3s ease;
     z-index: 51;
   }
-  .sidebar-mobile-open :deep(.sidebar) {
+  .sidebar.sidebar-mobile-open {
     transform: translateX(0);
   }
 }

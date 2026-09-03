@@ -14,6 +14,7 @@ export const useToastStore = defineStore('toast', () => {
   function success(msg) { show(msg, 'success') }
   function error(msg) { show(msg, 'error') }
   function info(msg) { show(msg, 'info') }
+  function warning(msg) { show(msg, 'warning') }
 
-  return { toasts, show, success, error, info }
+  return { toasts, show, success, error, info, warning }
 })

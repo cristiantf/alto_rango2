@@ -1,4 +1,4 @@
-﻿<template>
+<template>
   <div class="client-dashboard">
     <div class="welcome-banner">
       <div>
@@ -206,5 +206,12 @@ async function doCheckin() {
 .attendance-item:last-child { border:none; }
 .attendance-date { font-weight:600; font-size:0.85rem; min-width:90px; }
 .attendance-time { flex:1; font-size:0.82rem; color:var(--text-muted); }
-@media (max-width:768px) { .dashboard-bottom { grid-template-columns:1fr; } .membership-info-grid { grid-template-columns:1fr; } }
+@media (max-width:768px) { 
+  .dashboard-bottom { grid-template-columns:1fr; } 
+  .membership-info-grid { grid-template-columns:1fr; } 
+}
+@media (max-width:480px) {
+  .welcome-banner { flex-direction:column; align-items:flex-start; }
+  .welcome-banner .btn { width:100%; justify-content:center; }
+}
 </style>

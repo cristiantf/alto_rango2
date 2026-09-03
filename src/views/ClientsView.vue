@@ -2,7 +2,7 @@
   <div>
     <div class="page-header">
       <div><h1>Clientes</h1><p class="page-subtitle">Gestiona los clientes del gimnasio</p></div>
-      <div style="display:flex;gap:12px">
+      <div class="header-actions">
         <button v-if="auth.isAdmin" class="btn btn-secondary" @click="$router.push('/kiosk')">👁️ Modo Kiosco</button>
         <button v-if="auth.isAdmin" class="btn btn-warning" @click="openDoorManual">🚪 Abrir Puerta Manual</button>
         <button v-if="auth.isAdmin" class="btn btn-primary" @click="showModal = true">➕ Nuevo Cliente</button>
@@ -19,29 +19,29 @@
 
     <div class="table-container">
       <table>
-        <thead><tr><th>Cliente</th><th>Email</th><th>Plan</th><th>Vence</th><th>Estado</th><th>Visitas</th><th v-if="auth.isAdmin">Acceso Facial</th><th v-if="auth.isAdmin">Verificación</th><th>Acciones</th></tr></thead>
+        <thead><tr><th>Cliente</th><th class="hide-mobile">Email</th><th>Plan</th><th class="hide-mobile">Vence</th><th>Estado</th><th class="hide-mobile">Visitas</th><th v-if="auth.isAdmin" class="hide-mobile">Acceso Facial</th><th v-if="auth.isAdmin" class="hide-mobile">Verificación</th><th>Acciones</th></tr></thead>
         <tbody>
           <tr v-for="c in filtered" :key="c.id">
             <td><div style="display:flex;align-items:center;gap:10px"><span style="font-size:1.5rem">{{ c.photo }}</span><strong>{{ c.name }}</strong></div></td>
-            <td>{{ c.email }}</td>
+            <td class="hide-mobile">{{ c.email }}</td>
             <td>{{ c.plan }}</td>
-            <td>{{ formatDate(c.plan_end) }}</td>
+            <td class="hide-mobile">{{ formatDate(c.plan_end) }}</td>
             <td><span class="badge" :class="statusClass(c.status)">{{ statusLabel(c.status) }}</span></td>
-            <td>{{ c.visits }}</td>
-            <td v-if="auth.isAdmin">
+            <td class="hide-mobile">{{ c.visits }}</td>
+            <td v-if="auth.isAdmin" class="hide-mobile">
               <label class="toggle-switch" title="Permiso de Acceso Facial">
                 <input type="checkbox" :checked="!!c.facial_access" @change="toggleFacialAccess(c, $event)">
                 <span class="slider round"></span>
               </label>
             </td>
-            <td v-if="auth.isAdmin">
+            <td v-if="auth.isAdmin" class="hide-mobile">
               <label class="toggle-switch toggle-success" title="Abrir puerta remotamente">
                 <input type="checkbox" @change="remoteCheckin(c, $event)">
                 <span class="slider round"></span>
               </label>
             </td>
             <td>
-              <div style="display:flex;gap:6px;flex-wrap:wrap">
+              <div style="display:grid; grid-template-columns: repeat(3, 1fr); gap: 6px; width: max-content;">
                 <button class="btn btn-secondary btn-sm" @click="viewClient(c)">👁️</button>
                 <button v-if="auth.isAdmin" class="btn btn-secondary btn-sm" @click="editClient(c)">✏️</button>
                 <button v-if="auth.isAdmin" class="btn btn-secondary btn-sm" @click="openFaceScan(c)" title="Escanear Rostro">📸</button>

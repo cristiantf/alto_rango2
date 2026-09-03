@@ -42,7 +42,13 @@ router.beforeEach((to, from, next) => {
     return
   }
   if (to.meta.roles && auth.isAuthenticated && !to.meta.roles.includes(auth.userRole)) {
-    next({ path: auth.isUsuario ? "/inicio-cliente" : "/", replace: true })
+    const fallbackPath = auth.isUsuario ? "/inicio-cliente" : "/"
+    if (to.path === fallbackPath) {
+      auth.logout()
+      next({ path: "/login", replace: true })
+      return
+    }
+    next({ path: fallbackPath, replace: true })
     return
   }
   next()

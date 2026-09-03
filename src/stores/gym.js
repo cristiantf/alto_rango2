@@ -1,7 +1,24 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
+import mqtt from 'mqtt'
 
-const API = import.meta.env.VITE_API_URL || 'http://localhost:8000/api'
+const mqttClient = mqtt.connect('wss://broker.emqx.io:8084/mqtt')
+
+mqttClient.on('connect', () => {
+  console.log('✅ Conectado al broker MQTT vía WebSockets')
+})
+
+function sendMqttOpen() {
+  if (mqttClient.connected) {
+    mqttClient.publish('altorango/gym/puerta/comando_secreto_777', 'abrir')
+    console.log('🚀 Mensaje MQTT enviado: abrir')
+  } else {
+    console.warn('⚠️ MQTT no está conectado, intentando reconectar...')
+    mqttClient.reconnect()
+  }
+}
+
+const API = import.meta.env.VITE_API_URL || 'https://altorangogym.com/api'
 
 async function api(path, opts = {}) {
   const res = await fetch(`${API}${path}`, {
@@ -30,19 +47,19 @@ function num(value) {
 }
 
 export const useGymStore = defineStore('gym', () => {
-  const clients      = ref([])
-  const plans        = ref([])
-  const products     = ref([])
-  const equipment    = ref([])
-  const payments     = ref([])
-  const promotions   = ref([])
-  const attendance   = ref([])
-  const routines     = ref([])
-  const sales        = ref([])
+  const clients = ref([])
+  const plans = ref([])
+  const products = ref([])
+  const equipment = ref([])
+  const payments = ref([])
+  const promotions = ref([])
+  const attendance = ref([])
+  const routines = ref([])
+  const sales = ref([])
   const notifications = ref([])
   const accessControlEnabled = ref(true)
-  const loading      = ref(false)
-  const error        = ref(null)
+  const loading = ref(false)
+  const error = ref(null)
 
   // ─── Cargar todos los datos desde la API ───────────────
   async function loadAll() {
@@ -60,15 +77,15 @@ export const useGymStore = defineStore('gym', () => {
         api('/routines'),
         api('/sales'),
       ])
-      clients.value    = c
-      plans.value      = (pl || []).map(p => ({ ...p, price: num(p.price), duration: num(p.duration) }))
-      products.value   = (pr || []).map(p => ({ ...p, price: num(p.price), stock: num(p.stock), sold: num(p.sold) }))
-      equipment.value  = eq
-      payments.value   = (pay || []).map(p => ({ ...p, amount: num(p.amount), discount: num(p.discount) }))
+      clients.value = c
+      plans.value = (pl || []).map(p => ({ ...p, price: num(p.price), duration: num(p.duration) }))
+      products.value = (pr || []).map(p => ({ ...p, price: num(p.price), stock: num(p.stock), sold: num(p.sold) }))
+      equipment.value = eq
+      payments.value = (pay || []).map(p => ({ ...p, amount: num(p.amount), discount: num(p.discount) }))
       promotions.value = (prom || []).map(p => ({ ...p, value: num(p.value) }))
       attendance.value = (att || []).map(r => ({ ...r, client: r.client || r.client_name }))
-      routines.value   = rot
-      sales.value      = (sal || []).map(s => ({ ...s, total: num(s.total) }))
+      routines.value = rot
+      sales.value = (sal || []).map(s => ({ ...s, total: num(s.total) }))
     } catch (err) {
       console.error('loadAll error:', err)
       error.value = err.message
@@ -108,9 +125,9 @@ export const useGymStore = defineStore('gym', () => {
     if (!accessControlEnabled.value) return { ok: false, reason: 'Control de acceso desactivado' }
     if (!client) return { ok: false, reason: 'Cliente no encontrado' }
     if (client.direct_access) return { ok: true, reason: 'Acceso VIP/Libre' }
-    if (client.status === 'frozen')   return { ok: false, reason: 'Membresía congelada' }
+    if (client.status === 'frozen') return { ok: false, reason: 'Membresía congelada' }
     if (client.status === 'expired' || client.status === 'completed') return { ok: false, reason: 'Membresía vencida o cumplida' }
-    if (client.status !== 'active')   return { ok: false, reason: 'Membresía inactiva' }
+    if (client.status !== 'active') return { ok: false, reason: 'Membresía inactiva' }
     if (client.plan_end && client.plan_end < todayStr() && client.plan !== 'Pospago por Tarjeta') {
       return { ok: false, reason: 'Membresía vencida por fecha' }
     }
@@ -129,7 +146,7 @@ export const useGymStore = defineStore('gym', () => {
 
     try {
       // Actualizar visitas en BD
-      const updates = { visits: (client.visits || 0) + 1 }
+      const updates = { visits: Number(client.visits || 0) + 1 }
       if (client.plan === 'Pospago por Tarjeta') {
         const currentVisits = client.visits_remaining != null ? client.visits_remaining : 30
         updates.visits_remaining = Math.max(0, currentVisits - 1)
@@ -145,10 +162,13 @@ export const useGymStore = defineStore('gym', () => {
       })
       attendance.value.unshift(record)
 
+      // 🚪 Enviar orden MQTT al ESP32 para abrir la puerta
+      sendMqttOpen()
+
       const msg = client.plan === 'Pospago por Tarjeta'
         ? `Entrada OK. Quedan ${updates.visits_remaining} asistencias`
         : `Entrada registrada: ${client.name}`
-        
+
       addNotification({
         type: 'checkin',
         title: 'Nuevo Ingreso',
@@ -190,8 +210,8 @@ export const useGymStore = defineStore('gym', () => {
     const client = clients.value.find(c => c.id === r.client_id)
     if (client?.plan === 'Pospago por Tarjeta') {
       const updates = {
-        visits_remaining: (client.visits_remaining || 0) + 1,
-        visits: Math.max(0, (client.visits || 0) - 1),
+        visits_remaining: Number(client.visits_remaining || 0) + 1,
+        visits: Math.max(0, Number(client.visits || 0) - 1),
         status: 'active',
       }
       await api(`/clients/${client.id}`, { method: 'PUT', body: updates })
@@ -206,14 +226,17 @@ export const useGymStore = defineStore('gym', () => {
   async function openDoorDirectly(adminId = 1) {
     try {
       const res = await api('/attendance/direct-open', { method: 'POST', body: { admin_id: adminId } })
-      
+
+      // 🚪 Enviar orden MQTT al ESP32
+      sendMqttOpen()
+
       addNotification({
         type: 'checkin',
         title: 'Apertura Manual',
         message: 'Puerta abierta remotamente',
         detail: `Hora: ${nowTime()}`
       })
-      
+
       return { success: true, message: res.message || 'Puerta abierta manualmente' }
     } catch (err) {
       return { success: false, message: err.message }
@@ -237,20 +260,20 @@ export const useGymStore = defineStore('gym', () => {
       }
     })
     payments.value.unshift(payment)
-    
+
     addNotification({
       type: 'payment',
       title: 'Pago Recibido',
       message: `${client?.name || 'Cliente'} - $${priced.final.toFixed(2)}`,
       detail: `Concepto: ${concept} | Método: ${method}`
     })
-    
+
     return payment
   }
 
   async function changeClientPlan(clientId, planName, { registerPayment = true, method = 'Efectivo' } = {}) {
     const client = clients.value.find(c => c.id === clientId)
-    const plan   = getPlanByName(planName)
+    const plan = getPlanByName(planName)
     if (!client || !plan) return null
 
     const end = new Date()
@@ -337,14 +360,14 @@ export const useGymStore = defineStore('gym', () => {
   async function addClient(clientData) {
     const created = await api('/clients', { method: 'POST', body: clientData })
     clients.value.unshift(created)
-    
+
     addNotification({
       type: 'client',
       title: 'Nuevo Cliente Registrado',
       message: clientData.name,
       detail: `Plan: ${clientData.plan || 'Sin plan'} | Cédula: ${clientData.cedula || 'N/A'}`
     })
-    
+
     return created
   }
 
@@ -376,14 +399,14 @@ export const useGymStore = defineStore('gym', () => {
 
   // Guardar clientes y productos (para compatibilidad con vistas que llaman save*)
   async function saveClients() { /* No-op: las mutaciones ya persisten via API */ }
-  async function savePlans()   { /* No-op */ }
-  async function saveProducts(){ /* No-op */ }
-  async function saveEquipment(){ /* No-op */ }
-  async function savePayments(){ /* No-op */ }
-  async function savePromotions(){ /* No-op */ }
-  async function saveAttendance(){ /* No-op */ }
-  async function saveRoutines(){ /* No-op */ }
-  async function saveSales()  { /* No-op */ }
+  async function savePlans() { /* No-op */ }
+  async function saveProducts() { /* No-op */ }
+  async function saveEquipment() { /* No-op */ }
+  async function savePayments() { /* No-op */ }
+  async function savePromotions() { /* No-op */ }
+  async function saveAttendance() { /* No-op */ }
+  async function saveRoutines() { /* No-op */ }
+  async function saveSales() { /* No-op */ }
 
   return {
     clients, plans, products, equipment, payments, promotions, attendance,

@@ -1,7 +1,10 @@
 <template>
   <header class="app-header">
     <div class="header-left">
-      <button class="btn-icon header-menu-btn" @click="$emit('toggle-sidebar')">☰</button>
+      <button class="btn-icon header-menu-btn" @click="$emit('toggle-sidebar')">
+        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="3" y1="12" x2="21" y2="12"></line><line x1="3" y1="6" x2="21" y2="6"></line><line x1="3" y1="18" x2="21" y2="18"></line></svg>
+      </button>
+      <div class="mobile-brand-name">Alto Rango</div>
       <div class="header-greeting">
         <h2>{{ greeting }}, {{ auth.userName }}</h2>
         <p class="header-sub">{{ auth.gymName }} · {{ auth.userRoleLabel }} · {{ today }}</p>
@@ -119,15 +122,16 @@ const today = computed(() => new Date().toLocaleDateString('es-EC', { weekday: '
 .notif-item p { color: var(--text-secondary); margin-top: 2px; }
 .notif-item small { color: var(--text-muted); }
 
+.mobile-brand-name { display: none; font-family: var(--font-display); font-size: 1.2rem; font-weight: 800; background: var(--gradient-primary); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+
 @media (max-width: 768px) {
   .app-header { left: 0; padding: 0 16px; }
-  .header-menu-btn { display: flex; }
-  .header-greeting p { display: none; }
-  .header-greeting h2 { font-size: 0.9rem; }
+  .header-menu-btn { display: flex; align-items: center; justify-content: center; padding: 6px; }
+  .mobile-brand-name { display: block; }
+  .header-greeting { display: none; }
 }
 @media (max-width: 480px) {
   .header-right { gap: 6px; }
-  .header-greeting h2 { display: none; }
 }
 
 .header-avatar-link {

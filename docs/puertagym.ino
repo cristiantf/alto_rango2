@@ -1,149 +1,45 @@
 /**
- * PROYECTO: CONTROL DE ACCESO ALTO RANGO SAAS
+ * PROYECTO: CONTROL DE ACCESO ALTO RANGO SAAS (MQTT Version)
  * HARDWARE: ESP32 DevKit V1 (30 pines)
  * 
  * CARACTERÍSTICAS:
  *  - WiFiManager con Timeout (Evita cuelgues tras apagones)
- *  - Reconexión automática si el router demora
- *  - Polling HTTPS seguro y no bloqueante a cPanel
+ *  - Conexión MQTT (broker.emqx.io) en vez de HTTP Polling
+ *  - Apertura instantánea, sin bloqueos de firewall
  */
 
 #include <WiFi.h>
-#include <HTTPClient.h>
-#include <WiFiClientSecure.h>
 #include <WiFiManager.h>
+#include <PubSubClient.h> // LIBRERIA REQUERIDA (Instalar desde el gestor de librerías)
 
 // ============================================================================
-// CONFIGURACIÓN 
+// CONFIGURACIÓN MQTT
 // ============================================================================
-const char* HOST_URL = "https://altorangogym.com";
+const char* mqtt_server = "broker.emqx.io";
+const int mqtt_port = 1883;
 
-// PINES
+// ⚠️ Este "topic" debe ser el mismo que uses en el Frontend de Vue.js
+const char* mqtt_topic_puerta = "altorango/gym/puerta/comando_secreto_777"; 
+
+// ============================================================================
+// PINES Y TIEMPOS
+// ============================================================================
 const int RELAY_PIN = 26;           // D26 — Relé de cerradura eléctrica
 const int LED_PIN   = 2;            // LED integrado del ESP32
+const unsigned long PUERTA_ABIERTA_MS = 3000;  
+const unsigned long TIMEOUT_WIFI_MS   = 180;   
 
-// TIEMPOS (milisegundos)
-const unsigned long PUERTA_ABIERTA_MS = 3000;  // Tiempo con puerta abierta
-const unsigned long POLLING_MS        = 2000;  // Intervalo de consulta a la nube
-const unsigned long TIMEOUT_WIFI_MS   = 180;   // Segundos antes de reiniciar si no hay WiFi
-
+// ============================================================================
 // VARIABLES DE ESTADO
-unsigned long msRelay  = 0;
-unsigned long msPoll   = 0;
-bool puertaAbierta     = false;
+// ============================================================================
+unsigned long msRelay = 0;
+bool puertaAbierta    = false;
 
-// Cliente seguro para cPanel (HTTPS)
-WiFiClientSecure clientSecure;
+WiFiClient espClient;
+PubSubClient client(espClient);
 
 // ============================================================================
-// SETUP — Inicialización del sistema
-// ============================================================================
-void setup() {
-  Serial.begin(115200);
-  
-  pinMode(RELAY_PIN, OUTPUT);
-  pinMode(LED_PIN, OUTPUT);
-  digitalWrite(RELAY_PIN, HIGH); // Relé apagado (Normalmente Cerrado)
-  digitalWrite(LED_PIN, LOW);    // LED apagado
-  
-  // 1. Configuración de WiFiManager
-  WiFiManager wm;
-  
-  // Si en 3 minutos (180s) no se configura o no encuentra el WiFi conocido, 
-  // el ESP32 se reinicia automáticamente (ideal para apagones).
-  wm.setConfigPortalTimeout(TIMEOUT_WIFI_MS);
-  
-  Serial.println(F("Conectando a WiFi..."));
-  
-  if (!wm.autoConnect("Gimnasio_AltoRango", "admin1234")) {
-    Serial.println(F("❌ Timeout WiFi. El router aún no arranca. Reiniciando en 3s..."));
-    delay(3000);
-    ESP.restart(); // Al reiniciar, volverá a intentar la conexión
-  }
-
-  // Si llega aquí, es porque ya se conectó
-  WiFi.setAutoReconnect(true);
-
-  Serial.println(F("\n✅ WiFi conectado exitosamente."));
-  Serial.print(F("IP Local: "));
-  Serial.println(WiFi.localIP());
-
-  // Ignorar validación de certificado SSL estricta (útil para cPanel)
-  clientSecure.setInsecure(); 
-}
-
-// ============================================================================
-// LOOP PRINCIPAL — Ciclo no bloqueante
-// ============================================================================
-void loop() {
-  unsigned long now = millis();
-
-  // --- 1. Temporizador de cierre de puerta ---
-  if (puertaAbierta && (now - msRelay >= PUERTA_ABIERTA_MS)) {
-    digitalWrite(RELAY_PIN, HIGH); // Apaga el relé
-    digitalWrite(LED_PIN, LOW);    // Apaga el LED
-    puertaAbierta = false;
-    Serial.println(F("🔒 Cerradura bloqueada."));
-  }
-
-  // --- 2. Tareas de nube (solo con WiFi) ---
-  if (WiFi.status() == WL_CONNECTED) {
-    
-    // Polling a cPanel (cada 2 segundos)
-    if (now - msPoll >= POLLING_MS) {
-      consultarPuertaNube();
-      msPoll = now;
-    }
-    
-  } else {
-    // Opcional: Parpadear LED si se pierde WiFi
-  }
-}
-
-// ============================================================================
-// COMUNICACIÓN CON CPANEL (HTTPS POLLING)
-// ============================================================================
-
-void consultarPuertaNube() {
-  HTTPClient http;
-  String url = String(HOST_URL) + "/api/attendance/check-door";
-  
-  http.begin(clientSecure, url);
-  int httpCode = http.GET();
-  
-  if (httpCode == 200) {
-    String resp = http.getString();
-    
-    // Validamos si la nube nos manda a abrir
-    if (resp.indexOf("\"open\":true") > 0 || resp.indexOf("\"open\": true") > 0) {
-       Serial.println(F("☁️ Comando de apertura recibido de cPanel."));
-       abrirPuerta();
-       confirmarAperturaNube();
-    }
-  } else if (httpCode > 0) {
-    Serial.printf("⚠️ Respuesta HTTP inusual: %d\n", httpCode);
-  } else {
-    Serial.printf("❌ Error de conexión: %s\n", http.errorToString(httpCode).c_str());
-  }
-  
-  http.end();
-}
-
-void confirmarAperturaNube() {
-  HTTPClient http;
-  String url = String(HOST_URL) + "/api/attendance/door-opened";
-  
-  http.begin(clientSecure, url);
-  int httpCode = http.GET();
-  
-  if (httpCode == 200) {
-    Serial.println(F("✅ Confirmación enviada a cPanel exitosamente."));
-  }
-  http.end();
-}
-
-// ============================================================================
-// ACCIÓN DE HARDWARE
+// FUNCIONES DE CONTROL
 // ============================================================================
 
 void abrirPuerta() {
@@ -152,6 +48,102 @@ void abrirPuerta() {
     digitalWrite(RELAY_PIN, LOW); // Activa el relé
     digitalWrite(LED_PIN, HIGH);  // Enciende el LED indicador
     puertaAbierta = true;
-    msRelay = millis(); // Reinicia el contador de cierre
+    msRelay = millis(); 
+  }
+}
+
+// Se ejecuta cada vez que recibimos un mensaje MQTT en el topic suscrito
+void callback(char* topic, byte* payload, unsigned int length) {
+  Serial.print("Mensaje recibido [");
+  Serial.print(topic);
+  Serial.print("]: ");
+  
+  String mensaje = "";
+  for (int i = 0; i < length; i++) {
+    mensaje += (char)payload[i];
+  }
+  Serial.println(mensaje);
+
+  // Si el mensaje es "abrir", abrimos la puerta
+  if (mensaje == "abrir") {
+    abrirPuerta();
+  }
+}
+
+void reconnect() {
+  // Bucle hasta que estemos reconectados al broker MQTT
+  while (!client.connected()) {
+    Serial.print(F("Intentando conexión MQTT..."));
+    
+    // Crear un ID de cliente aleatorio para evitar colisiones
+    String clientId = "ESP32-AltoRango-";
+    clientId += String(random(0xffff), HEX);
+    
+    if (client.connect(clientId.c_str())) {
+      Serial.println(F("conectado!"));
+      // Nos suscribimos al canal (topic)
+      client.subscribe(mqtt_topic_puerta);
+      Serial.println(F("Suscrito al canal de apertura. Esperando ordenes..."));
+    } else {
+      Serial.print(F("falló, rc="));
+      Serial.print(client.state());
+      Serial.println(F(" intentando de nuevo en 5 segundos"));
+      delay(5000);
+    }
+  }
+}
+
+// ============================================================================
+// SETUP
+// ============================================================================
+void setup() {
+  Serial.begin(115200);
+  
+  pinMode(RELAY_PIN, OUTPUT);
+  pinMode(LED_PIN, OUTPUT);
+  digitalWrite(RELAY_PIN, HIGH); // Relé apagado (NC)
+  digitalWrite(LED_PIN, LOW);    
+  
+  // WiFiManager
+  WiFiManager wm;
+  wm.setConfigPortalTimeout(TIMEOUT_WIFI_MS);
+  
+  Serial.println(F("Conectando a WiFi..."));
+  if (!wm.autoConnect("Gimnasio_AltoRango", "admin1234")) {
+    Serial.println(F("❌ Timeout WiFi. Reiniciando en 3s..."));
+    delay(3000);
+    ESP.restart();
+  }
+
+  WiFi.setAutoReconnect(true);
+  Serial.println(F("\n✅ WiFi conectado."));
+  Serial.print(F("IP Local: "));
+  Serial.println(WiFi.localIP());
+
+  // Configurar MQTT
+  client.setServer(mqtt_server, mqtt_port);
+  client.setCallback(callback);
+}
+
+// ============================================================================
+// LOOP PRINCIPAL
+// ============================================================================
+void loop() {
+  unsigned long now = millis();
+
+  // Temporizador de cierre
+  if (puertaAbierta && (now - msRelay >= PUERTA_ABIERTA_MS)) {
+    digitalWrite(RELAY_PIN, HIGH); 
+    digitalWrite(LED_PIN, LOW);    
+    puertaAbierta = false;
+    Serial.println(F("🔒 Cerradura bloqueada."));
+  }
+
+  // Mantener conexión MQTT viva
+  if (WiFi.status() == WL_CONNECTED) {
+    if (!client.connected()) {
+      reconnect();
+    }
+    client.loop(); // Escucha mensajes entrantes (Mágico y silencioso)
   }
 }

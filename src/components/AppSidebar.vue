@@ -3,23 +3,23 @@
     <div class="sidebar-brand">
       <img src="/logo.jpeg" alt="Alto Rango" style="height: 48px; width: 48px; object-fit: contain; border-radius: 8px; flex-shrink: 0;" />
       <transition name="fade">
-        <span v-if="!collapsed" class="brand-name">Alto Rango</span>
+        <span v-if="!collapsed || isMobile" class="brand-name">Alto Rango</span>
       </transition>
     </div>
     <nav class="sidebar-nav">
       <router-link v-for="item in menuItems" :key="item.path" :to="item.path" class="nav-item" :class="{ active: $route.path === item.path }">
         <span class="nav-icon">{{ item.icon }}</span>
         <transition name="fade">
-          <span v-if="!collapsed" class="nav-label">{{ item.label }}</span>
+          <span v-if="!collapsed || isMobile" class="nav-label">{{ item.label }}</span>
         </transition>
-        <span v-if="!collapsed && item.badge" class="nav-badge">{{ item.badge }}</span>
+        <span v-if="(!collapsed || isMobile) && item.badge" class="nav-badge">{{ item.badge }}</span>
       </router-link>
     </nav>
   </aside>
 </template>
 
 <script setup>
-import { computed } from 'vue'
+import { computed, ref, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '../stores/auth'
 import { useCartStore } from '../stores/cart'
@@ -28,6 +28,15 @@ const props = defineProps({ collapsed: Boolean })
 const router = useRouter()
 const auth = useAuthStore()
 const cart = useCartStore()
+
+const isMobile = ref(false)
+const checkMobile = () => { isMobile.value = window.innerWidth <= 768 }
+
+onMounted(() => {
+  checkMobile()
+  window.addEventListener('resize', checkMobile)
+})
+onUnmounted(() => window.removeEventListener('resize', checkMobile))
 
 const allItems = [
   // Admin + Empleado
@@ -124,7 +133,7 @@ const menuItems = computed(() =>
 .sidebar-footer:hover { color: var(--danger); background: rgba(239,68,68,0.08); }
 
 @media (max-width: 768px) {
-  .sidebar { transform: translateX(-100%); }
-  .sidebar.show { transform: translateX(0); }
+  /* No width collapse logic on mobile, only translate handled by App.vue */
+  .sidebar.collapsed { width: var(--sidebar-width); }
 }
 </style>
