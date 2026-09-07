@@ -105,7 +105,8 @@ async function handleLogin() {
 async function handleRegister() {
   loadingReg.value = true
   try {
-    const res = await fetch('http://localhost:8000/api/auth/register', {
+    const API = import.meta.env.VITE_API_URL || 'https://altorangogym.com/api'
+    const res = await fetch(`${API}/auth/register`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({

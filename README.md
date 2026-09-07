@@ -2,28 +2,28 @@
 
 Sistema web integral (SaaS) diseñado para la administración operativa, financiera y comercial de centros fitness. El sistema centraliza la gestión de **Alto Rango Gym** (membresías, control de acceso, asistencia) y la tienda **Alto Rango Suplementos** (punto de venta e inventario).
 
-## Arquitectura del Proyecto (Estado Actual)
+## 🚀 Estado de Despliegue (Producción)
 
-El proyecto se encuentra actualmente en fase de Prototipo Funcional (MVP), diseñado bajo un enfoque **Single Page Application (SPA)** implementado con **Vue.js 3** (Composition API) y empaquetado mediante **Vite** para HMR ultra-rápido y optimización de build.
+El sistema se encuentra **desplegado y en producción** en: **[https://altorangogym.com](https://altorangogym.com)**
 
-El manejo de estado global (autenticación, carrito de compras, configuración de usuario) se administra mediante **Pinia**, asegurando un flujo de datos unidireccional y reactividad predecible en toda la aplicación. La capa de enrutamiento es manejada por **Vue Router** utilizando modo Hash (`#`), ideal para despliegues estáticos sencillos sin requerir configuración de servidor para fallbacks de rutas.
+El backend (API REST) y el frontend (SPA) están alojados en un servidor cPanel, con soporte para control de acceso mediante hardware físico (ESP32) configurado por *HTTP Polling*. Adicionalmente, el frontend está configurado con Capacitor para su empaquetado y distribución como aplicación móvil Android (APK).
 
-### Tech Stack Frontend
+## Arquitectura del Proyecto
 
-- **Framework Core**: Vue.js 3 (Composition API, `<script setup>`)
-- **Build Tool / Bundler**: Vite
+El proyecto se divide en dos capas principales:
+
+### Tech Stack Frontend (App Web & Móvil)
+- **Framework Core**: Vue.js 3 (Composition API)
+- **Build Tool**: Vite
 - **State Management**: Pinia
-- **Routing**: Vue Router 4 (Hash Mode)
-- **Data Visualization**: Chart.js (v4.5)
-- **Persistencia Temporal**: `localStorage` (Simulación de base de datos y persistencia de sesión local)
+- **Routing**: Vue Router 4
+- **App Móvil**: Capacitor (para empaquetado APK)
 
-### Backend & Base de Datos (Roadmap)
-
-De acuerdo al documento de arquitectura SaaS, la implementación final contará con:
-- **Backend / API REST**: Laravel 12
-- **Base de Datos Relacional**: PostgreSQL (Arquitectura Multi-Tenant: Shared Database + Tenant ID)
-- **Autenticación**: Laravel Sanctum / JWT
-- **Caché y Colas**: Redis para colas de envío de correos, facturación y reportes.
+### Tech Stack Backend & API
+- **Framework REST API**: Laravel 12
+- **Base de Datos**: MySQL (cPanel)
+- **Integración Hardware**: ESP32 DevKit V1 (Control de chapa eléctrica vía HTTP Polling)
+- **Reconocimiento Facial**: Kiosco web impulsado por IA (`face-api.js`) procesado del lado del cliente.
 
 ## Requisitos del Sistema y Entorno Local
 
