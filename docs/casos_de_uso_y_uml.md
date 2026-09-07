@@ -33,47 +33,46 @@ Este documento describe la arquitectura funcional del sistema del gimnasio Alto 
 A continuación se muestra el esquema general de qué puede hacer cada actor dentro de Alto Rango:
 
 ```mermaid
-usecaseDiagram
-    actor "Administrador" as admin
-    actor "Recepcionista" as rec
-    actor "Entrenador" as ent
-    actor "Cliente" as cli
-    actor "Kiosco Facial" as kiosco
-    
-    package "Alto Rango SaaS" {
-        usecase "Gestionar Sucursales y Usuarios" as UC_Admin1
-        usecase "Apertura Remota / Manual" as UC_Admin2
-        
-        usecase "Registrar Clientes" as UC_G1
-        usecase "Gestionar Pagos y Planes" as UC_G2
-        usecase "Vender Productos (POS)" as UC_G3
-        
-        usecase "Asignar Rutinas" as UC_E1
-        usecase "Ver Ficha Física" as UC_E2
-        
-        usecase "Escanear Rostro" as UC_K1
-        usecase "Verificar Membresía Activa" as UC_K2
-        
-        usecase "Ver Estado de Membresía" as UC_C1
-        usecase "Ver Rutina Asignada" as UC_C2
-    }
-    
+flowchart LR
+    %% Actores
+    admin(["👤 Administrador"])
+    rec(["👤 Recepcionista"])
+    ent(["👤 Entrenador"])
+    cli(["👤 Cliente"])
+    kiosco(["🖥️ Kiosco Facial"])
+
+    %% Casos de Uso
+    subgraph sistema["⚙️ Alto Rango SaaS"]
+        UC_Admin1["Gestionar Sucursales\ny Usuarios"]
+        UC_Admin2["Apertura Remota\n/ Manual"]
+        UC_G1["Registrar Clientes"]
+        UC_G2["Gestionar Pagos\ny Planes"]
+        UC_G3["Vender Productos\n(POS)"]
+        UC_E1["Asignar Rutinas"]
+        UC_E2["Ver Ficha Física"]
+        UC_K1["Escanear Rostro"]
+        UC_K2["Verificar Membresía\nActiva"]
+        UC_C1["Ver Estado de\nMembresía"]
+        UC_C2["Ver Rutina\nAsignada"]
+    end
+
+    %% Relaciones
     admin --> UC_Admin1
     admin --> UC_Admin2
     admin --> UC_G1
     admin --> UC_G2
     admin --> UC_G3
-    
+
     rec --> UC_G1
     rec --> UC_G2
     rec --> UC_G3
-    
+
     ent --> UC_E1
     ent --> UC_E2
-    
+
     kiosco --> UC_K1
     kiosco --> UC_K2
-    
+
     cli --> UC_C1
     cli --> UC_C2
 ```
