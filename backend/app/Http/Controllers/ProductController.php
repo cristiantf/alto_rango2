@@ -7,10 +7,10 @@ use Illuminate\Support\Facades\DB;
 
 class ProductController extends Controller
 {
-    public function index()
+    public function index(Request $request)
     {
         try {
-            $products = DB::table('inventory')->orderBy('id')->get();
+            $products = $this->forTenant(DB::table('inventory'), $request)->orderBy('id')->get();
             return response()->json($products);
         } catch (\Exception $e) {
             return response()->json(['error' => 'Error del servidor'], 500);
@@ -19,7 +19,7 @@ class ProductController extends Controller
 
     public function store(Request $request)
     {
-        $tenant_id = $request->input('tenant_id', 1);
+        $tenant_id = $this->tenantId($request) ?? 1;
         $name = $request->input('name');
         $category = $request->input('category');
         $price = $request->input('price');

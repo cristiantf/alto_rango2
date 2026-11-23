@@ -82,16 +82,19 @@ const newRoutine = ref({
   exercisesText: '',
 })
 
-function saveRoutine() {
+async function saveRoutine() {
   if (!newRoutine.value.name) return
-  gym.routines.push({
-    id: Date.now(),
-    name: newRoutine.value.name,
-    level: newRoutine.value.level,
-    description: newRoutine.value.description,
-    exercises: newRoutine.value.exercisesText.split('\n').filter(e => e.trim()),
-  })
-  gym.saveRoutines()
+  try {
+    await gym.addRoutine({
+      name: newRoutine.value.name,
+      level: newRoutine.value.level,
+      description: newRoutine.value.description,
+      exercises: newRoutine.value.exercisesText.split('\n').filter(e => e.trim()),
+    })
+  } catch (err) {
+    toast.error('No se pudo crear la rutina: ' + err.message)
+    return
+  }
   showModal.value = false
   newRoutine.value = { name: '', level: 'Principiante', description: '', exercisesText: '' }
   toast.success('Rutina creada')

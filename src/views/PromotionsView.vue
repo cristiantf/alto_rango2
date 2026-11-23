@@ -23,8 +23,8 @@
           <tr v-for="p in gym.promotions" :key="p.id">
             <td><strong>{{ p.name }}</strong></td>
             <td>{{ p.discount_percentage }}%</td>
-            <td>{{ p.start_date ? new Date(p.start_date).toLocaleDateString() : 'N/A' }}</td>
-            <td>{{ p.end_date ? new Date(p.end_date).toLocaleDateString() : 'N/A' }}</td>
+            <td>{{ p.start_date ? new Date(p.start_date + 'T00:00:00').toLocaleDateString('es-EC') : 'N/A' }}</td>
+            <td>{{ p.end_date ? new Date(p.end_date + 'T00:00:00').toLocaleDateString('es-EC') : 'N/A' }}</td>
             <td>
               <span class="badge" :class="p.is_active ? 'badge-success' : 'badge-danger'">
                 {{ p.is_active ? 'Activa' : 'Inactiva' }}

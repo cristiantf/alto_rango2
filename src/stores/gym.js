@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import mqtt from 'mqtt'
+import { api } from '../services/api'
 
 const mqttClient = mqtt.connect('wss://broker.emqx.io:8084/mqtt')
 
@@ -18,21 +19,6 @@ function sendMqttOpen() {
   }
 }
 
-const API = import.meta.env.VITE_API_URL || 'https://altorangogym.com/api'
-
-async function api(path, opts = {}) {
-  const res = await fetch(`${API}${path}`, {
-    headers: { 'Content-Type': 'application/json' },
-    ...opts,
-    body: opts.body ? JSON.stringify(opts.body) : undefined,
-  })
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({ error: res.statusText }))
-    throw new Error(err.error || res.statusText)
-  }
-  return res.json()
-}
-
 function todayStr() {
   return new Date().toISOString().split('T')[0]
 }
@@ -44,6 +30,71 @@ function nowTime() {
 function num(value) {
   const n = Number(value)
   return Number.isFinite(n) ? n : 0
+}
+
+// ─── Reglas de planes ─────────────────────────────────────
+// Asistencias que incluye un plan pospago al activarse/renovarse
+export const POSPAGO_VISITS = 30
+
+// Un plan es pospago si su nombre lo indica ("Pospago Tarjeta", "Pospago por Tarjeta"…).
+// Antes se comparaba con el texto exacto 'Pospago por Tarjeta', que no coincide con la BD.
+export function isPospago(planName) {
+  return /pospago/i.test(String(planName || ''))
+}
+
+// Estado real del cliente: un plan por tiempo con fecha vencida pasa a "expired"
+// aunque en la BD siga como "active". Pospago depende de asistencias, no de la fecha.
+function effectiveStatus(client) {
+  if (client.status === 'active' && !isPospago(client.plan) && client.plan_end && client.plan_end < todayStr()) {
+    return 'expired'
+  }
+  return client.status
+}
+
+function normalizeClient(c) {
+  return { ...c, status: effectiveStatus(c) }
+}
+
+function normalizePlan(p) {
+  // La API devuelve duration_days; las vistas usan duration
+  return { ...p, price: num(p.price), duration: num(p.duration_days ?? p.duration) }
+}
+
+// La BD guarda discount_percentage / discount_amount / is_active / start_date / end_date;
+// las vistas y el cálculo de descuentos usan type / value / active / startDate / endDate.
+function normalizePromotion(p) {
+  const percent = num(p.discount_percentage)
+  const amount = num(p.discount_amount)
+  return {
+    ...p,
+    active: !!Number(p.is_active),
+    type: percent > 0 ? 'percent' : 'fixed',
+    value: percent > 0 ? percent : amount,
+    startDate: p.start_date || null,
+    endDate: p.end_date || null,
+    applies_to: p.applies_to || 'membresias',
+  }
+}
+
+function promotionBody(p) {
+  return {
+    name: p.name,
+    discount_percentage: p.type === 'percent' ? num(p.value) : 0,
+    discount_amount: p.type === 'fixed' ? num(p.value) : 0,
+    start_date: p.startDate || null,
+    end_date: p.endDate || null,
+    is_active: !!p.active,
+  }
+}
+
+function productBody(p) {
+  return {
+    name: p.name,
+    category: p.category,
+    price: num(p.price),
+    stock: num(p.stock),
+    is_public: p.is_public ?? true,
+  }
 }
 
 export const useGymStore = defineStore('gym', () => {
@@ -77,12 +128,12 @@ export const useGymStore = defineStore('gym', () => {
         api('/routines'),
         api('/sales'),
       ])
-      clients.value = c
-      plans.value = (pl || []).map(p => ({ ...p, price: num(p.price), duration: num(p.duration) }))
+      clients.value = (c || []).map(normalizeClient)
+      plans.value = (pl || []).map(normalizePlan)
       products.value = (pr || []).map(p => ({ ...p, price: num(p.price), stock: num(p.stock), sold: num(p.sold) }))
       equipment.value = eq
       payments.value = (pay || []).map(p => ({ ...p, amount: num(p.amount), discount: num(p.discount) }))
-      promotions.value = (prom || []).map(p => ({ ...p, value: num(p.value) }))
+      promotions.value = (prom || []).map(normalizePromotion)
       attendance.value = (att || []).map(r => ({ ...r, client: r.client || r.client_name }))
       routines.value = rot
       sales.value = (sal || []).map(s => ({ ...s, total: num(s.total) }))
@@ -120,6 +171,19 @@ export const useGymStore = defineStore('gym', () => {
     return plans.value.find(p => p.name === name)
   }
 
+  async function addPlan(form) {
+    const body = { name: form.name, price: num(form.price), duration_days: num(form.duration) || 30, features: form.features || [] }
+    const created = await api('/plans', { method: 'POST', body })
+    plans.value.push(normalizePlan({ ...created, ...body }))
+  }
+
+  async function updatePlan(id, form) {
+    const body = { name: form.name, price: num(form.price), duration_days: num(form.duration) || 30, features: form.features || [] }
+    await api(`/plans/${id}`, { method: 'PUT', body })
+    const p = plans.value.find(x => x.id === id)
+    if (p) Object.assign(p, normalizePlan({ ...p, ...form, ...body }))
+  }
+
   // ─── Control de acceso ─────────────────────────────────
   function canOpenDoor(client) {
     if (!accessControlEnabled.value) return { ok: false, reason: 'Control de acceso desactivado' }
@@ -128,13 +192,11 @@ export const useGymStore = defineStore('gym', () => {
     if (client.status === 'frozen') return { ok: false, reason: 'Membresía congelada' }
     if (client.status === 'expired' || client.status === 'completed') return { ok: false, reason: 'Membresía vencida o cumplida' }
     if (client.status !== 'active') return { ok: false, reason: 'Membresía inactiva' }
-    if (client.plan_end && client.plan_end < todayStr() && client.plan !== 'Pospago por Tarjeta') {
+    if (isPospago(client.plan)) {
+      const visits = client.visits_remaining != null ? client.visits_remaining : POSPAGO_VISITS
+      if (visits <= 0) return { ok: false, reason: 'Plan pospago cumplido (0 asistencias)' }
+    } else if (client.plan_end && client.plan_end < todayStr()) {
       return { ok: false, reason: 'Membresía vencida por fecha' }
-    }
-    if (client.plan === 'Pospago por Tarjeta') {
-      const visits = client.visits_remaining != null ? client.visits_remaining : 30
-      if (visits <= 0)
-        return { ok: false, reason: 'Plan pospago cumplido (0 asistencias)' }
     }
     return { ok: true, reason: '' }
   }
@@ -147,8 +209,9 @@ export const useGymStore = defineStore('gym', () => {
     try {
       // Actualizar visitas en BD
       const updates = { visits: Number(client.visits || 0) + 1 }
-      if (client.plan === 'Pospago por Tarjeta') {
-        const currentVisits = client.visits_remaining != null ? client.visits_remaining : 30
+      const pospago = isPospago(client.plan)
+      if (pospago) {
+        const currentVisits = client.visits_remaining != null ? client.visits_remaining : POSPAGO_VISITS
         updates.visits_remaining = Math.max(0, currentVisits - 1)
         if (updates.visits_remaining === 0) updates.status = 'completed'
       }
@@ -160,12 +223,12 @@ export const useGymStore = defineStore('gym', () => {
         method: 'POST',
         body: { client_id: clientId, client_name: client.name, date: todayStr(), checkin: nowTime() }
       })
-      attendance.value.unshift(record)
+      attendance.value.unshift({ ...record, client: record.client_name })
 
       // 🚪 Enviar orden MQTT al ESP32 para abrir la puerta
       sendMqttOpen()
 
-      const msg = client.plan === 'Pospago por Tarjeta'
+      const msg = pospago
         ? `Entrada OK. Quedan ${updates.visits_remaining} asistencias`
         : `Entrada registrada: ${client.name}`
 
@@ -208,7 +271,7 @@ export const useGymStore = defineStore('gym', () => {
     r.status = 'cancelled'
     // Revertir visitas pospago
     const client = clients.value.find(c => c.id === r.client_id)
-    if (client?.plan === 'Pospago por Tarjeta') {
+    if (client && isPospago(client.plan)) {
       const updates = {
         visits_remaining: Number(client.visits_remaining || 0) + 1,
         visits: Math.max(0, Number(client.visits || 0) - 1),
@@ -259,7 +322,7 @@ export const useGymStore = defineStore('gym', () => {
         promo: priced.promoName,
       }
     })
-    payments.value.unshift(payment)
+    payments.value.unshift({ ...payment, client: payment.client_name, amount: num(payment.amount), discount: num(payment.discount) })
 
     addNotification({
       type: 'payment',
@@ -276,13 +339,14 @@ export const useGymStore = defineStore('gym', () => {
     const plan = getPlanByName(planName)
     if (!client || !plan) return null
 
+    const days = plan.duration === 999 ? 365 : (plan.duration || 30)
     const end = new Date()
-    end.setDate(end.getDate() + (plan.duration === 999 ? 365 : plan.duration))
+    end.setDate(end.getDate() + days)
     const updates = {
       plan: plan.name,
       plan_end: end.toISOString().split('T')[0],
       status: 'active',
-      visits_remaining: plan.name.includes('Pospago') ? 30 : null,
+      visits_remaining: isPospago(plan.name) ? POSPAGO_VISITS : null,
     }
     await api(`/clients/${clientId}`, { method: 'PUT', body: updates })
     Object.assign(client, updates)
@@ -307,7 +371,7 @@ export const useGymStore = defineStore('gym', () => {
   async function unfreezeMembership(clientId) {
     await api(`/clients/${clientId}`, { method: 'PUT', body: { status: 'active' } })
     const client = clients.value.find(c => c.id === clientId)
-    if (client) client.status = 'active'
+    if (client) Object.assign(client, normalizeClient({ ...client, status: 'active' }))
   }
 
   // ─── Promociones ───────────────────────────────────────
@@ -315,14 +379,22 @@ export const useGymStore = defineStore('gym', () => {
     const p = promotions.value.find(x => x.id === id)
     if (!p) return
     const newActive = !p.active
-    if (newActive) promotions.value.forEach(x => { if (x.applies_to === p.applies_to) x.active = false })
-    p.active = newActive
-    await api(`/promotions/${id}`, { method: 'PUT', body: { ...p, active: newActive } })
+    // Solo una promoción activa por tipo: desactivar las demás también en la BD
+    if (newActive) {
+      const others = promotions.value.filter(x => x.id !== id && x.active && x.applies_to === p.applies_to)
+      for (const o of others) {
+        await api(`/promotions/${o.id}`, { method: 'PUT', body: promotionBody({ ...o, active: false }) })
+        Object.assign(o, { active: false, is_active: 0 })
+      }
+    }
+    await api(`/promotions/${id}`, { method: 'PUT', body: promotionBody({ ...p, active: newActive }) })
+    Object.assign(p, { active: newActive, is_active: newActive ? 1 : 0 })
   }
 
   async function addPromotion(data) {
-    const created = await api('/promotions', { method: 'POST', body: { ...data } })
-    promotions.value.push({ ...data, ...created })
+    const body = promotionBody(data)
+    const created = await api('/promotions', { method: 'POST', body })
+    promotions.value.push(normalizePromotion({ ...body, ...created, description: data.description }))
   }
 
   async function deletePromotion(id) {
@@ -341,25 +413,69 @@ export const useGymStore = defineStore('gym', () => {
 
   // ─── Ventas ────────────────────────────────────────────
   async function recordSale(sale) {
-    const created = await api('/sales', { method: 'POST', body: sale })
-    sales.value.unshift({ ...sale, id: created.id })
+    const items = sale.items.map(i => ({ ...i, inventory_id: i.inventory_id ?? i.id }))
+    const created = await api('/sales', { method: 'POST', body: { ...sale, items } })
+    const clientName = sale.client_name || sale.client || 'Cliente'
+    sales.value.unshift({ ...sale, items, client_name: clientName, id: created.id, total: num(sale.total) })
     addNotification({
       type: 'sale',
       title: 'Nueva venta registrada',
-      message: `${sale.client_name} · $${num(sale.total).toFixed(2)} · ${sale.method}`,
-      detail: sale.items.map(i => `${i.name} x${i.qty}`).join(', '),
+      message: `${clientName} · $${num(sale.total).toFixed(2)} · ${sale.method}`,
+      detail: items.map(i => `${i.name} x${i.qty}`).join(', '),
     })
-    // Actualizar stock localmente (la API ya lo hizo en BD)
-    sale.items.forEach(item => {
-      const p = products.value.find(p => p.name === item.name)
+    // Reflejar el stock localmente (la API ya lo descontó en BD)
+    items.forEach(item => {
+      const p = products.value.find(p => p.id === item.inventory_id) || products.value.find(p => p.name === item.name)
       if (p) { p.stock = Math.max(0, p.stock - item.qty); p.sold = (p.sold || 0) + item.qty }
     })
   }
 
-  // ─── CRUD simples ──────────────────────────────────────
+  // ─── Productos y equipos ───────────────────────────────
+  async function addProduct(data) {
+    const body = productBody(data)
+    const created = await api('/products', { method: 'POST', body })
+    products.value.push({ ...data, ...body, id: created.id, sold: 0 })
+  }
+
+  async function updateProduct(id, data) {
+    const p = products.value.find(x => x.id === id)
+    const body = productBody({ ...p, ...data })
+    await api(`/products/${id}`, { method: 'PUT', body })
+    if (p) Object.assign(p, data, body)
+  }
+
+  async function deleteProduct(id) {
+    await api(`/products/${id}`, { method: 'DELETE' })
+    products.value = products.value.filter(p => p.id !== id)
+  }
+
+  async function addEquipment(data) {
+    const created = await api('/equipment', { method: 'POST', body: data })
+    equipment.value.push(created)
+  }
+
+  async function updateEquipment(id, data) {
+    const { id: _id, tenant_id, created_at, updated_at, ...body } = data
+    await api(`/equipment/${id}`, { method: 'PUT', body })
+    const e = equipment.value.find(x => x.id === id)
+    if (e) Object.assign(e, body)
+  }
+
+  async function deleteEquipmentItem(id) {
+    await api(`/equipment/${id}`, { method: 'DELETE' })
+    equipment.value = equipment.value.filter(e => e.id !== id)
+  }
+
+  // ─── Rutinas ───────────────────────────────────────────
+  async function addRoutine(data) {
+    const created = await api('/routines', { method: 'POST', body: data })
+    routines.value.push({ ...data, id: created.id })
+  }
+
+  // ─── Clientes y planes ─────────────────────────────────
   async function addClient(clientData) {
     const created = await api('/clients', { method: 'POST', body: clientData })
-    clients.value.unshift(created)
+    clients.value.unshift(normalizeClient(created))
 
     addNotification({
       type: 'client',
@@ -374,7 +490,7 @@ export const useGymStore = defineStore('gym', () => {
   async function updateClient(id, updates) {
     await api(`/clients/${id}`, { method: 'PUT', body: updates })
     const c = clients.value.find(x => x.id === id)
-    if (c) Object.assign(c, updates)
+    if (c) Object.assign(c, normalizeClient({ ...c, ...updates }))
   }
 
   async function deletePlan(id) {
@@ -387,39 +503,18 @@ export const useGymStore = defineStore('gym', () => {
     clients.value = clients.value.filter(c => c.id !== id)
   }
 
-  async function deleteProduct(id) {
-    await api(`/products/${id}`, { method: 'DELETE' })
-    products.value = products.value.filter(p => p.id !== id)
-  }
-
-  async function deleteEquipmentItem(id) {
-    await api(`/equipment/${id}`, { method: 'DELETE' })
-    equipment.value = equipment.value.filter(e => e.id !== id)
-  }
-
-  // Guardar clientes y productos (para compatibilidad con vistas que llaman save*)
-  async function saveClients() { /* No-op: las mutaciones ya persisten via API */ }
-  async function savePlans() { /* No-op */ }
-  async function saveProducts() { /* No-op */ }
-  async function saveEquipment() { /* No-op */ }
-  async function savePayments() { /* No-op */ }
-  async function savePromotions() { /* No-op */ }
-  async function saveAttendance() { /* No-op */ }
-  async function saveRoutines() { /* No-op */ }
-  async function saveSales() { /* No-op */ }
-
   return {
     clients, plans, products, equipment, payments, promotions, attendance,
     routines, sales, notifications, accessControlEnabled, loading, error,
     activePromo, unreadNotifications,
     loadAll,
-    saveClients, savePlans, saveProducts, saveEquipment, savePayments,
-    savePromotions, saveAttendance, saveRoutines, saveSales,
-    applyMembershipDiscount, getPlanByName, canOpenDoor, registerCheckin,
+    applyMembershipDiscount, getPlanByName, addPlan, updatePlan, canOpenDoor, registerCheckin,
     verifyAttendance, toggleVerification, cancelAttendance, setAccessControl, openDoorDirectly,
     addPayment, changeClientPlan, renewMembership, freezeMembership, unfreezeMembership,
     togglePromotion, addPromotion, deletePromotion,
     addNotification, markNotificationsRead, recordSale,
-    addClient, updateClient, deletePlan, deleteClient, deleteProduct, deleteEquipmentItem,
+    addProduct, updateProduct, deleteProduct, addEquipment, updateEquipment, deleteEquipmentItem,
+    addRoutine,
+    addClient, updateClient, deletePlan, deleteClient,
   }
 })

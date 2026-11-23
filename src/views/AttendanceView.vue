@@ -23,7 +23,7 @@
 
     <div class="stats-grid">
       <div class="stat-card"><div class="stat-icon" style="background:rgba(59,130,246,0.15)">📊</div><div class="stat-value">{{ todayCount }}</div><div class="stat-label">Asistencias Hoy</div></div>
-      <div class="stat-card"><div class="stat-icon" style="background:rgba(245,158,11,0.15)">💳</div><div class="stat-value">{{ pospagoLeft }}</div><div class="stat-label">Restantes Pospago (Diego)</div></div>
+      <div class="stat-card"><div class="stat-icon" style="background:rgba(245,158,11,0.15)">💳</div><div class="stat-value">{{ pospagoLeft }}</div><div class="stat-label">Asistencias pospago restantes</div></div>
       <div class="stat-card"><div class="stat-icon" style="background:rgba(16,185,129,0.15)">✅</div><div class="stat-value">{{ verifiedCount }}</div><div class="stat-label">Verificadas</div></div>
     </div>
 
@@ -60,7 +60,7 @@
         <select v-model="selectedClientId" style="margin-bottom:16px">
           <option value="">Seleccionar cliente...</option>
           <option v-for="c in selectableClients" :key="c.id" :value="String(c.id)">
-            {{ c.name }} — {{ c.plan }} ({{ statusLabel(c.status) }}{{ c.visitsRemaining != null ? ', ' + c.visitsRemaining + ' rest.' : '' }})
+            {{ c.name }} — {{ c.plan }} ({{ statusLabel(c.status) }}{{ c.visits_remaining != null ? ', ' + c.visits_remaining + ' rest.' : '' }})
           </option>
         </select>
         <button class="btn btn-primary btn-lg" style="width:100%" @click="registerAttendance" :disabled="!selectedClientId">✅ Validar y Abrir Puerta</button>
@@ -71,7 +71,7 @@
 
 <script setup>
 import { ref, computed } from 'vue'
-import { useGymStore } from '../stores/gym'
+import { useGymStore, isPospago, POSPAGO_VISITS } from '../stores/gym'
 import { useAuthStore } from '../stores/auth'
 import { useToastStore } from '../stores/toast'
 
@@ -86,9 +86,11 @@ const doorStatus = ref('Cerrada')
 const today = new Date().toISOString().split('T')[0]
 const todayCount = computed(() => gym.attendance.filter(r => r.date === today && r.status !== 'cancelled').length)
 const verifiedCount = computed(() => gym.attendance.filter(r => r.status === 'verified').length)
+// Suma de asistencias pendientes de todos los clientes con plan pospago
 const pospagoLeft = computed(() => {
-  const d = gym.clients.find(c => c.plan === 'Pospago por Tarjeta')
-  return d?.visitsRemaining ?? 0
+  return gym.clients
+    .filter(c => isPospago(c.plan) && c.status === 'active')
+    .reduce((sum, c) => sum + Number(c.visits_remaining ?? POSPAGO_VISITS), 0)
 })
 
 const selectableClients = computed(() => {

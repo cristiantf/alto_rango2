@@ -7,10 +7,15 @@ use Illuminate\Support\Facades\DB;
 
 class AttendanceController extends Controller
 {
-    public function index()
+    public function index(Request $request)
     {
         try {
-            $attendance = DB::table('attendance')->orderByDesc('id')->get();
+            // attendance no tiene tenant_id: se filtra por el gimnasio del cliente
+            $attendance = $this->forTenant(
+                DB::table('attendance as a')->join('clients as c', 'c.id', '=', 'a.client_id')->select('a.*'),
+                $request,
+                'c.tenant_id'
+            )->orderByDesc('a.id')->get();
             return response()->json($attendance);
         } catch (\Exception $e) {
             return response()->json(['error' => 'Error del servidor'], 500);
@@ -33,6 +38,9 @@ class AttendanceController extends Controller
                 'checkin' => $checkin,
                 'status' => $status
             ]);
+            // Marca la apertura pendiente para los controladores que consultan /attendance/check-door
+            // (respaldo HTTP del ESP8266/ESP32 cuando MQTT no llega).
+            $this->markPendingOpen();
             return response()->json(array_merge(['id' => $insertId], $request->all()), 201);
         } catch (\Exception $e) {
             return response()->json(['error' => 'Error del servidor'], 500);
@@ -89,7 +97,7 @@ class AttendanceController extends Controller
                 'status' => 'completed'
             ]);
 
-            DB::table('access_control_state')->whereRaw('1 = 1')->update(['pending_open' => 1]);
+            $this->markPendingOpen();
             return response()->json(['allowed' => true, 'message' => 'Acceso concedido. Puerta abierta.']);
         } catch (\Exception $e) {
             return response()->json(['error' => 'Error del servidor'], 500);
@@ -99,7 +107,7 @@ class AttendanceController extends Controller
     public function directOpen(Request $request)
     {
         $admin_id = $request->input('admin_id');
-        DB::table('access_control_state')->whereRaw('1 = 1')->update(['pending_open' => 1]);
+        $this->markPendingOpen();
         return response()->json(['success' => true, 'message' => 'Puerta abierta manualmente']);
     }
 
@@ -141,5 +149,15 @@ class AttendanceController extends Controller
     {
         DB::table('access_control_state')->whereRaw('1 = 1')->update(['pending_open' => 0]);
         return response()->json(['success' => true]);
+    }
+
+    /** Marca una apertura pendiente para el ESP (respaldo HTTP). Crea la fila de estado si no existe. */
+    private function markPendingOpen(): void
+    {
+        if (DB::table('access_control_state')->exists()) {
+            DB::table('access_control_state')->update(['pending_open' => 1]);
+        } else {
+            DB::table('access_control_state')->insert(['tenant_id' => 1, 'is_active' => 1, 'pending_open' => 1]);
+        }
     }
 }

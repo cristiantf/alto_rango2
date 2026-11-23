@@ -7,10 +7,10 @@ use Illuminate\Support\Facades\DB;
 
 class SaleController extends Controller
 {
-    public function index()
+    public function index(Request $request)
     {
         try {
-            $sales = DB::table('sales as s')
+            $sales = $this->forTenant(DB::table('sales as s'), $request, 's.tenant_id')
                 ->leftJoin('users as u', 's.user_id', '=', 'u.id')
                 ->leftJoin('clients as c', 's.client_id', '=', 'c.id')
                 ->select('s.*', 'u.name as employee_name', 'c.name as client_name', 'c.email as client_email')
@@ -32,7 +32,7 @@ class SaleController extends Controller
 
     public function store(Request $request)
     {
-        $tenant_id = $request->input('tenant_id', 1);
+        $tenant_id = $this->tenantId($request) ?? 1;
         $user_id = $request->input('user_id');
         $client_id = $request->input('client_id');
         $total = $request->input('total');
@@ -72,7 +72,7 @@ class SaleController extends Controller
             }
 
             DB::commit();
-            return response()->json(['success' => true, 'saleId' => $saleId], 201);
+            return response()->json(['success' => true, 'id' => $saleId, 'saleId' => $saleId], 201);
         } catch (\Exception $e) {
             DB::rollBack();
             return response()->json(['error' => 'Error del servidor: ' . $e->getMessage()], 500);

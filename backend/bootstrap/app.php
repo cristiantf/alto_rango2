@@ -15,5 +15,6 @@ return Application::configure(basePath: dirname(__DIR__))
         //
     })
     ->withExceptions(function (Exceptions $exceptions): void {
-        //
+        // La API siempre responde JSON (p. ej. errores de validación 422 en vez de redirección)
+        $exceptions->shouldRenderJsonWhen(fn ($request) => $request->is('api/*'));
     })->create();

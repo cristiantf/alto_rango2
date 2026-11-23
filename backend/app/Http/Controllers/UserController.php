@@ -16,10 +16,10 @@ class UserController extends Controller
         'cliente' => 3
     ];
 
-    public function index()
+    public function index(Request $request)
     {
         try {
-            $rows = DB::table('users as u')
+            $rows = $this->forTenant(DB::table('users as u'), $request, 'u.tenant_id')
                 ->select('id', 'tenant_id', 'role_id', 'name', 'email', 'profile_image_url', 'status', 'last_login', 'created_at')
                 ->orderBy('id')
                 ->get();
@@ -51,7 +51,7 @@ class UserController extends Controller
 
     public function store(Request $request)
     {
-        $tenant_id = $request->input('tenant_id', 1);
+        $tenant_id = $this->tenantId($request) ?? 1;
         $name = $request->input('name');
         $email = $request->input('email');
         $password = $request->input('password', 'cambiar123');

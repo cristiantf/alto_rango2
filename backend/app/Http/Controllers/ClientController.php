@@ -7,10 +7,10 @@ use Illuminate\Support\Facades\DB;
 
 class ClientController extends Controller
 {
-    public function index()
+    public function index(Request $request)
     {
         try {
-            $clients = DB::table('clients')->orderBy('id')->get();
+            $clients = $this->forTenant(DB::table('clients'), $request)->orderBy('id')->get();
             return response()->json($clients);
         } catch (\Exception $e) {
             return response()->json(['error' => 'Error del servidor'], 500);
@@ -32,7 +32,12 @@ class ClientController extends Controller
 
     public function store(Request $request)
     {
-        $tenant_id = $request->input('tenant_id', 1);
+        $request->validate([
+            'name'  => 'required|string|max:255',
+            'email' => 'required|email|max:255',
+        ]);
+
+        $tenant_id = $this->tenantId($request) ?? 1;
         $name = $request->input('name');
         $email = $request->input('email');
         $phone = $request->input('phone');
@@ -98,7 +103,8 @@ class ClientController extends Controller
             
         } catch (\Exception $e) {
             DB::rollBack();
-            return response()->json(['error' => $e->getMessage()], 500);
+            report($e);
+            return response()->json(['error' => 'Error del servidor'], 500);
         }
     }
 
@@ -137,10 +143,11 @@ class ClientController extends Controller
                         'password' => $data['password']
                     ]);
                 } else {
+                    $current = DB::table('clients')->where('id', $id)->first();
                     DB::table('users')->insert([
-                        'tenant_id' => 1,
+                        'tenant_id' => $current->tenant_id ?? 1,
                         'role_id' => 3,
-                        'name' => $data['name'] ?? 'Cliente',
+                        'name' => $data['name'] ?? ($current->name ?? 'Cliente'),
                         'email' => $data['email'],
                         'password' => $data['password']
                     ]);
@@ -159,9 +166,21 @@ class ClientController extends Controller
     public function destroy($id)
     {
         try {
+            DB::beginTransaction();
+            $client = DB::table('clients')->where('id', $id)->first();
             DB::table('clients')->where('id', $id)->delete();
+
+            // Quitar también su cuenta de acceso (rol 3 = cliente) para que no quede un login huérfano
+            if ($client && $client->email) {
+                DB::table('users')
+                    ->where('email', $client->email)
+                    ->where('role_id', 3)
+                    ->delete();
+            }
+            DB::commit();
             return response()->json(['ok' => true]);
         } catch (\Exception $e) {
+            DB::rollBack();
             return response()->json(['error' => 'Error del servidor'], 500);
         }
     }

@@ -179,32 +179,43 @@ function removeEquipment(id) {
   gym.deleteEquipmentItem(id)
   toast.success('Equipo dado de baja')
 }
-function addStock(p) { p.stock += 10; gym.saveProducts(); toast.success(`+10 unidades: ${p.name}`) }
-
-function saveProduct() {
-  if (editing.value) {
-    const i = gym.products.findIndex(p => p.id === editing.value)
-    if (i >= 0) gym.products[i] = { ...gym.products[i], ...productForm.value }
-    toast.success('Producto actualizado')
-  } else {
-    gym.products.push({ ...productForm.value, id: Date.now(), sold: 0, rating: 5.0 })
-    toast.success('Producto agregado')
+async function addStock(p) {
+  try {
+    await gym.updateProduct(p.id, { stock: p.stock + 10 })
+    toast.success(`+10 unidades: ${p.name}`)
+  } catch (err) {
+    toast.error('No se pudo actualizar el stock: ' + err.message)
   }
-  gym.saveProducts()
-  showModal.value = false
 }
 
-function saveEquipment() {
-  if (editing.value) {
-    const i = gym.equipment.findIndex(e => e.id === editing.value)
-    if (i >= 0) gym.equipment[i] = { ...gym.equipment[i], ...eqForm.value }
-    toast.success('Equipo actualizado')
-  } else {
-    gym.equipment.push({ ...eqForm.value, id: Date.now() })
-    toast.success('Equipo registrado')
+async function saveProduct() {
+  try {
+    if (editing.value) {
+      await gym.updateProduct(editing.value, productForm.value)
+      toast.success('Producto actualizado')
+    } else {
+      await gym.addProduct(productForm.value)
+      toast.success('Producto agregado')
+    }
+    showModal.value = false
+  } catch (err) {
+    toast.error('No se pudo guardar el producto: ' + err.message)
   }
-  gym.saveEquipment()
-  showModal.value = false
+}
+
+async function saveEquipment() {
+  try {
+    if (editing.value) {
+      await gym.updateEquipment(editing.value, eqForm.value)
+      toast.success('Equipo actualizado')
+    } else {
+      await gym.addEquipment(eqForm.value)
+      toast.success('Equipo registrado')
+    }
+    showModal.value = false
+  } catch (err) {
+    toast.error('No se pudo guardar el equipo: ' + err.message)
+  }
 }
 </script>
 

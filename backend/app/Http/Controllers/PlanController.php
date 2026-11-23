@@ -7,10 +7,10 @@ use Illuminate\Support\Facades\DB;
 
 class PlanController extends Controller
 {
-    public function index()
+    public function index(Request $request)
     {
         try {
-            $plans = DB::table('plans')->orderBy('id')->get();
+            $plans = $this->forTenant(DB::table('plans'), $request)->orderBy('id')->get();
             $plans = $plans->map(function ($plan) {
                 $plan->features = json_decode($plan->features ?: '[]');
                 return $plan;
@@ -23,7 +23,7 @@ class PlanController extends Controller
 
     public function store(Request $request)
     {
-        $tenant_id = $request->input('tenant_id', 1);
+        $tenant_id = $this->tenantId($request) ?? 1;
         $name = $request->input('name');
         $duration_days = $request->input('duration_days', 30);
         $price = $request->input('price');

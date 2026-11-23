@@ -7,10 +7,10 @@ use Illuminate\Support\Facades\DB;
 
 class PaymentController extends Controller
 {
-    public function index()
+    public function index(Request $request)
     {
         try {
-            $payments = DB::table('payments as p')
+            $payments = $this->forTenant(DB::table('payments as p'), $request, 'p.tenant_id')
                 ->select('p.*', 'p.client_name as client')
                 ->orderByDesc('p.date')
                 ->get();
@@ -22,7 +22,7 @@ class PaymentController extends Controller
 
     public function store(Request $request)
     {
-        $tenant_id = $request->input('tenant_id', 1);
+        $tenant_id = $this->tenantId($request) ?? 1;
         $client_id = $request->input('client_id');
         $client_name = $request->input('client_name', 'Cliente');
         $concept = $request->input('concept', 'Cobro general');

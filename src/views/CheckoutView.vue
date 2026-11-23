@@ -134,30 +134,26 @@ const receiptTotal = ref(0)
 const orderNumber = ref('')
 const orderDate = new Date().toLocaleDateString('es-EC', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })
 
-function completePurchase() {
+async function completePurchase() {
   receiptItems.value = [...cart.items]
   receiptSubtotal.value = cart.subtotal
   receiptTax.value = cart.tax
   receiptTotal.value = cart.total
   orderNumber.value = 'ORD-' + Date.now().toString().slice(-6)
   const methodName = paymentMethods.find(m => m.id === selectedMethod.value)?.name || selectedMethod.value
-  gym.recordSale({
-    id: Date.now(),
-    date: new Date().toISOString().split('T')[0],
-    client: form.value.name,
-    items: receiptItems.value.map(i => ({ name: i.name, qty: i.qty, price: i.price })),
-    total: receiptTotal.value,
-    method: methodName,
-  })
-  // Descontar stock
-  receiptItems.value.forEach(item => {
-    const p = gym.products.find(x => x.id === item.id || x.name === item.name)
-    if (p) {
-      p.stock = Math.max(0, p.stock - item.qty)
-      p.sold = (p.sold || 0) + item.qty
-    }
-  })
-  gym.saveProducts()
+  try {
+    // recordSale guarda la venta, la API descuenta el stock y el store lo refleja localmente
+    await gym.recordSale({
+      date: new Date().toISOString().split('T')[0],
+      client_name: form.value.name,
+      items: receiptItems.value.map(i => ({ id: i.id, name: i.name, qty: i.qty, price: i.price })),
+      total: receiptTotal.value,
+      method: methodName,
+    })
+  } catch (err) {
+    toast.error('No se pudo registrar la compra: ' + err.message)
+    return
+  }
   cart.clear()
   step.value = 3
   toast.success('¡Compra realizada exitosamente!')

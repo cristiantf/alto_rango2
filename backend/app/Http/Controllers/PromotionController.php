@@ -7,10 +7,10 @@ use Illuminate\Support\Facades\DB;
 
 class PromotionController extends Controller
 {
-    public function index()
+    public function index(Request $request)
     {
         try {
-            $promotions = DB::table('promotions')->orderBy('id')->get();
+            $promotions = $this->forTenant(DB::table('promotions'), $request)->orderBy('id')->get();
             return response()->json($promotions);
         } catch (\Exception $e) {
             return response()->json(['error' => 'Error del servidor'], 500);
@@ -19,7 +19,7 @@ class PromotionController extends Controller
 
     public function store(Request $request)
     {
-        $tenant_id = $request->input('tenant_id', 1);
+        $tenant_id = $this->tenantId($request) ?? 1;
         $name = $request->input('name');
         $discount_percentage = $request->input('discount_percentage', 0);
         $discount_amount = $request->input('discount_amount', 0);

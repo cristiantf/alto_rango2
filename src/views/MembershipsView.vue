@@ -57,8 +57,8 @@
           <tr v-for="c in gym.clients" :key="c.id">
             <td><strong>{{ c.name }}</strong></td>
             <td>{{ c.plan }}</td>
-            <td>{{ c.planEnd }}</td>
-            <td>{{ c.visitsRemaining != null ? c.visitsRemaining + ' rest.' : '—' }}</td>
+            <td>{{ c.plan_end || '—' }}</td>
+            <td>{{ c.visits_remaining != null ? c.visits_remaining + ' rest.' : '—' }}</td>
             <td><span class="badge" :class="statusBadge(c.status)">{{ statusLabel(c.status) }}</span></td>
             <td>
               <div style="display:flex;gap:6px;flex-wrap:wrap">
@@ -270,8 +270,8 @@ function formatAppliesTo(pr) {
 
 function formatVigencia(pr) {
   if (!pr.startDate && !pr.endDate) return 'Permanente'
-  const start = pr.startDate ? new Date(pr.startDate).toLocaleDateString('es-EC') : 'Siempre'
-  const end = pr.endDate ? new Date(pr.endDate).toLocaleDateString('es-EC') : 'Siempre'
+  const start = pr.startDate ? new Date(pr.startDate + 'T00:00:00').toLocaleDateString('es-EC') : 'Siempre'
+  const end = pr.endDate ? new Date(pr.endDate + 'T00:00:00').toLocaleDateString('es-EC') : 'Siempre'
   return `${start} a ${end}`
 }
 
@@ -288,19 +288,19 @@ function deletePlan(id) {
   toast.success('Plan eliminado')
 }
 
-function savePlan() {
-  if (editingPlan.value) {
-    const idx = gym.plans.findIndex(p => p.id === editingPlan.value)
-    if (idx >= 0) {
-      Object.assign(gym.plans[idx], planForm.value)
+async function savePlan() {
+  try {
+    if (editingPlan.value) {
+      await gym.updatePlan(editingPlan.value, planForm.value)
+      toast.success('Plan actualizado')
+    } else {
+      await gym.addPlan({ ...planForm.value, features: planForm.value.features || ['Acceso a máquinas'] })
+      toast.success('Plan creado')
     }
-    toast.success('Plan actualizado')
-  } else {
-    gym.plans.push({ ...planForm.value, id: Date.now(), features: planForm.value.features || ['Acceso a máquinas'] })
-    toast.success('Plan creado')
+    showPlanModal.value = false
+  } catch (err) {
+    toast.error('No se pudo guardar el plan: ' + err.message)
   }
-  gym.savePlans()
-  showPlanModal.value = false
 }
 
 function openChangePlan(c) {

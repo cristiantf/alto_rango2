@@ -49,7 +49,7 @@
 <script setup>
 import { ref, onMounted, computed, nextTick } from 'vue'
 import { Chart, registerables } from 'chart.js'
-import { useGymStore } from '../stores/gym'
+import { useGymStore, isPospago, POSPAGO_VISITS } from '../stores/gym'
 import { useAuthStore } from '../stores/auth'
 Chart.register(...registerables)
 
@@ -97,7 +97,10 @@ const alerts = computed(() => {
     { id: 1, type: 'warning', icon: '⚠️', text: `${gym.clients.filter(c => c.status === 'expired').length} membresías vencidas` },
     { id: 2, type: 'danger', icon: '📦', text: low.length ? `Stock bajo: ${low[0].name} (${low[0].stock} uds)` : 'Inventario de productos OK' },
     { id: 3, type: 'info', icon: '🚪', text: gym.accessControlEnabled ? 'Control de acceso activo' : 'Control de acceso desactivado' },
-    { id: 4, type: 'warning', icon: '💳', text: `Pospago: ${gym.clients.find(c => c.plan === 'Pospago por Tarjeta')?.visitsRemaining ?? 0} asistencias restantes` },
+    { id: 4, type: 'warning', icon: '💳', text: (() => {
+      const low = gym.clients.filter(c => isPospago(c.plan) && c.status === 'active' && Number(c.visits_remaining ?? POSPAGO_VISITS) <= 5)
+      return low.length ? `Pospago: ${low.length} cliente(s) con 5 o menos asistencias` : 'Pospago: sin clientes por agotar asistencias'
+    })() },
   ]
 })
 

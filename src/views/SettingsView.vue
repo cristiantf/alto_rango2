@@ -106,7 +106,7 @@
 </template>
 
 <script setup>
-import { ref } from 'vue'
+import { ref, onMounted } from 'vue'
 import { useAuthStore } from '../stores/auth'
 import { useGymStore } from '../stores/gym'
 import { useToastStore } from '../stores/toast'
@@ -114,6 +114,9 @@ import { useToastStore } from '../stores/toast'
 const auth = useAuthStore()
 const gym = useGymStore()
 const toast = useToastStore()
+
+// La tabla "Usuarios del Sistema" estaba vacía porque nunca se cargaban
+onMounted(() => auth.loadSystemUsers())
 
 const gymForm = ref({
   name: auth.gym?.name || 'Alto Rango Gym',

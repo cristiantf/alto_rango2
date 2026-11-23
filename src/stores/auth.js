@@ -1,7 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 
-const API = import.meta.env.VITE_API_URL || 'https://altorangogym.com/api'
+import { apiFetch } from '../services/api'
 
 const DEFAULT_GYM = {
   id: 1,
@@ -81,7 +81,7 @@ export const useAuthStore = defineStore('auth', () => {
   async function login(email, password) {
     if (!email || !password) return false
     try {
-      const res = await fetch(`${API}/auth/login`, {
+      const res = await apiFetch(`/auth/login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email, password }),
@@ -115,14 +115,14 @@ export const useAuthStore = defineStore('auth', () => {
   // ── Usuarios del sistema (cargados desde API) ───────────
   async function loadSystemUsers() {
     try {
-      const res = await fetch(`${API}/users`)
+      const res = await apiFetch(`/users`)
       if (res.ok) systemUsers.value = await res.json()
     } catch (err) { console.error('loadSystemUsers error:', err) }
   }
 
   async function addUser(userData) {
     try {
-      const res = await fetch(`${API}/users`, {
+      const res = await apiFetch(`/users`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(userData),
@@ -133,7 +133,7 @@ export const useAuthStore = defineStore('auth', () => {
 
   async function updateUser(id, data) {
     try {
-      const res = await fetch(`${API}/users/${id}`, {
+      const res = await apiFetch(`/users/${id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(data),
@@ -156,7 +156,7 @@ export const useAuthStore = defineStore('auth', () => {
   async function deleteUser(id) {
     if (user.value?.id === id) return false
     try {
-      const res = await fetch(`${API}/users/${id}`, { method: 'DELETE' })
+      const res = await apiFetch(`/users/${id}`, { method: 'DELETE' })
       if (res.ok) await loadSystemUsers()
       return res.ok
     } catch (err) { console.error('deleteUser error:', err); return false }

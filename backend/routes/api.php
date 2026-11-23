@@ -12,6 +12,7 @@ use App\Http\Controllers\PromotionController;
 use App\Http\Controllers\PaymentController;
 use App\Http\Controllers\SaleController;
 use App\Http\Controllers\RoutineController;
+use App\Http\Controllers\EquipmentController;
 
 // Rutas de API para Alto Rango SaaS
 
@@ -51,11 +52,5 @@ Route::apiResource('sales', SaleController::class)->only(['index', 'store']);
 // 9. Rutinas
 Route::apiResource('routines', RoutineController::class);
 
-// 10. Equipamiento (del archivo gym.js)
-Route::get('/equipment', function () {
-    return response()->json(\Illuminate\Support\Facades\DB::table('equipment')->orderBy('id')->get());
-});
-Route::delete('/equipment/{id}', function ($id) {
-    \Illuminate\Support\Facades\DB::table('equipment')->where('id', $id)->delete();
-    return response()->json(['ok' => true]);
-});
+// 10. Equipamiento
+Route::apiResource('equipment', EquipmentController::class)->except(['show']);
